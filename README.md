@@ -22,3 +22,7 @@
 ### LLM Runners and Hosting methods explored:
 - Self Hosted: LLM is freeware but requires a strong CPU build with heavy VRAM ~12GB
 - Cloud Hosted: Both paid and free versions of LLM are available, need to pay only for hosting (per token for paid LLM models; per hour for hosting)
+
+## High-Level Design
+
+![HLD Diagram](./docs/design/HLD.jpg)
