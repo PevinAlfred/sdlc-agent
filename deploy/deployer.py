@@ -3,7 +3,7 @@
 import yaml
 import subprocess
 
-def load_deploy_config(path="./llm-interaction/config/deploy_config.yaml"):
+def load_deploy_config(path="./config/deploy_config.yaml"):
     with open(path) as f:
         return yaml.safe_load(f)
 
