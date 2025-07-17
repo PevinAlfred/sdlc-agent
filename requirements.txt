@@ -1,2 +1,7 @@
-# Project dependencies
-pytest
+langchain
+mistralai
+prometheus-api-client
+jira
+PyGithub
+python-dotenv
+requests

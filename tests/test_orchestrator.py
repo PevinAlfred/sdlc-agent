@@ -1,4 +1,2 @@
-# Unit tests for Orchestrator
-
-def test_orchestrator_init():
-    assert True  # placeholder
+def test_orchestrator():
+    assert True  # Add real tests here
