@@ -1,14 +1,16 @@
-# Configuration settings for the SDLC Agent
+import os
+from dotenv import load_dotenv
 
-PROMETHEUS_URL = "http://localhost:9090"
-GRAFANA_URL = "http://localhost:3000"
-GITHUB_TOKEN = "your_github_token"
-JIRA_URL = "https://your_jira_instance.atlassian.net"
-JIRA_USER = "your_jira_user"
-JIRA_API_TOKEN = "your_jira_api_token"
-EMAIL_SMTP_SERVER = "smtp.your-email-provider.com"
-EMAIL_PORT = 587
-EMAIL_USER = "your_email@example.com"
-EMAIL_PASSWORD = "your_email_password"
-DEPLOYMENT_SCRIPT_PATH = "path_to_deployment_script"
-LOG_LEVEL = "INFO"
+load_dotenv()
+
+PROMETHEUS_URL = os.getenv("PROMETHEUS_URL", "http://localhost:9090")
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+JIRA_URL = os.getenv("JIRA_SERVER")
+JIRA_USER = os.getenv("JIRA_USER")
+JIRA_API_TOKEN = os.getenv("JIRA_API_TOKEN")
+EMAIL_SMTP_SERVER = os.getenv("EMAIL_HOST")
+EMAIL_PORT = os.getenv("EMAIL_PORT")
+EMAIL_USER = os.getenv("EMAIL_USER")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASS")
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+

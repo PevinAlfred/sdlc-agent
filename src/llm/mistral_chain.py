@@ -1,25 +1,29 @@
- 
-from mistralai.client import MistralClient
-from mistralai.models.chat_completion import ChatMessage
+
 import os
 from dotenv import load_dotenv
+from langchain.prompts import PromptTemplate
+from langchain_mistralai import ChatMistralAI
+from langchain.chains import LLMChain
 
 load_dotenv()
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 
-client = MistralClient(api_key=MISTRAL_API_KEY)
+# Initialize LangChain LLM for Mistral
+llm = ChatMistralAI(api_key=MISTRAL_API_KEY, model="mistral-tiny")
 
 def get_llm_decision(prompt, context=None):
     """
-    Use Mistral LLM to make a decision based on the prompt and context.
+    Use LangChain to manage prompt and LLM call for agentic decision-making.
     Returns the LLM's response as a string.
     """
-    messages = [ChatMessage(role="system", content="You are an SDLC agent that makes deployment and incident decisions."),
-                ChatMessage(role="user", content=prompt)]
-    if context:
-        messages.append(ChatMessage(role="user", content=str(context)))
-    response = client.chat(
-        model="mistral-tiny",
-        messages=messages
+    template = PromptTemplate(
+        input_variables=["prompt", "context"],
+        template="""
+You are an SDLC agent that makes deployment, monitoring, and incident decisions.\n
+{prompt}
+Context: {context}
+"""
     )
-    return response.choices[0].message.content.strip()
+    chain = LLMChain(llm=llm, prompt=template)
+    result = chain.run({"prompt": prompt, "context": context or ""})
+    return result.strip()
