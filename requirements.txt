@@ -1,7 +1,9 @@
 langchain
-mistralai
+langchain-mistralai
 prometheus-api-client
 jira
 PyGithub
 python-dotenv
 requests
+Flask
+prometheus-flask-exporter

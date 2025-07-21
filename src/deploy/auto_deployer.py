@@ -1,63 +1,104 @@
 import os
-import requests
-import base64
+import subprocess
+import logging
+import shutil
 from src.llm.mistral_chain import get_llm_decision
 from src.config.settings import GITHUB_TOKEN
 
-GITHUB_API_URL = "https://api.github.com"
+logger = logging.getLogger(__name__)
 
-def fetch_file_from_github(repo_full_name, file_path, branch="main"):
-    """
-    Fetch a file's content from a GitHub repository using the API.
-    Returns the decoded file content as a string.
-    """
-    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
-    url = f"{GITHUB_API_URL}/repos/{repo_full_name}/contents/{file_path}?ref={branch}"
-    response = requests.get(url, headers=headers)
-    if response.status_code == 200:
-        content = response.json()["content"]
-        return base64.b64decode(content).decode()
+def clone_or_pull_repo(repo_full_name, branch, target_dir):
+    """Clones or pulls a specific branch of a GitHub repository into a target directory."""
+    os.makedirs(target_dir, exist_ok=True)
+    repo_url = f"https://x-access-token:{GITHUB_TOKEN}@github.com/{repo_full_name}.git"
+
+    if os.path.exists(os.path.join(target_dir, ".git")):
+        logger.info(f"Repository exists at {target_dir}. Fetching updates for branch '{branch}'.")
+        try:
+            subprocess.run(["git", "-C", target_dir, "fetch"], check=True, capture_output=True, text=True)
+            subprocess.run(["git", "-C", target_dir, "checkout", branch], check=True, capture_output=True, text=True)
+            subprocess.run(["git", "-C", target_dir, "pull", "origin", branch], check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to pull updates for {repo_full_name}, attempting re-clone: {e.stderr}")
+            shutil.rmtree(target_dir)
+            subprocess.run(["git", "clone", "--branch", branch, repo_url, target_dir], check=True, capture_output=True, text=True)
     else:
-        return None
+        logger.info(f"Cloning repository {repo_full_name} (branch: {branch}) into {target_dir}.")
+        try:
+            subprocess.run(["git", "clone", "--branch", branch, repo_url, target_dir], check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to clone repository {repo_full_name}: {e.stderr}")
+            raise
 
-def fetch_app_context(repo_full_name, branch="main"):
-    """
-    Fetches key files (e.g., requirements.txt, Dockerfile, package.json) from the repo for LLM context.
-    Returns a string summary of the app context.
-    """
+def fetch_app_context_from_local(local_repo_path):
+    """Fetches key files from the local cloned repo for LLM context."""
     files_to_try = ["requirements.txt", "Dockerfile", "package.json", "Pipfile", "pyproject.toml", "README.md"]
     context = []
-    for file in files_to_try:
-        content = fetch_file_from_github(repo_full_name, file, branch)
-        if content:
-            context.append(f"# {file}\n{content}\n")
+    for file_name in files_to_try:
+        file_path = os.path.join(local_repo_path, file_name)
+        if os.path.exists(file_path):
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    context.append(f"# {file_name}\n{content}\n")
+            except Exception as e:
+                logger.warning(f"Could not read context file {file_path}: {e}")
     return "\n".join(context)
 
-def generate_deployment_script(repo_full_name, branch="main"):
-    """
-    Fetch app context, prompt LLM to generate a deployment script, and return the script.
-    """
-    app_context = fetch_app_context(repo_full_name, branch)
+def generate_deployment_script(local_repo_path, container_name):
+    """Fetch app context from local repo, prompt LLM to generate a deployment script, and return the script."""
+    app_context = fetch_app_context_from_local(local_repo_path)
     if not app_context:
-        app_context = "No context files found."
-    prompt = f"""
-You are an expert DevOps engineer. Generate a production-ready deployment script for the following app.\n
-Here is the app context:\n{app_context}\n
-The script should build and run the app in a production environment.\n
-Output only the script, no explanations.\n"""
-    script = get_llm_decision(prompt)
-    return script
+        app_context = "No context files found. Assume a generic Python/Flask web application with a Dockerfile."
 
-def save_deployment_script(script, path="generated_deploy.sh"):
-    with open(path, "w", encoding="utf-8") as f:
+    # A more robust prompt that generates a script resilient to zombie containers.
+    prompt = f"""
+Based on the application context provided, generate a complete, robust shell script to deploy a Docker application.
+
+Instructions:
+1.  **Use provided names and ports**:
+    - Container Name: '{container_name}'
+    - Image Name: '{container_name}'
+    - Host Port: 5000 (or determine from Dockerfile if possible)
+2.  **Start with `set -e`**: The script must exit immediately if any command fails.
+3.  **Robust Cleanup**: Before building, the script MUST find and stop any container currently using the target host port.
+    - Use `docker ps -q --filter "publish=<HOST_PORT>"` to find the container ID.
+    - Check if a container ID was found before attempting to stop/remove it.
+    - Provide clear `echo` statements for each step (e.g., "--- Cleaning up old containers ---").
+4.  **Build Step**: Build the Docker image using `docker build -t <IMAGE_NAME> .`.
+5.  **Deploy Step**: Run the new container using `docker run`.
+    - It must be named (`--name <CONTAINER_NAME>`).
+    - It must be detached (`-d`).
+    - It must have a restart policy (`--restart always`).
+    - It must map the correct port (`-p <HOST_PORT>:<CONTAINER_PORT>`).
+6.  **Format**: The final output MUST be ONLY the raw shell script. Do not include markdown or explanations.
+"""
+    context = f"""
+Application Context:
+{app_context}
+"""
+    script = get_llm_decision(prompt, context).strip()
+    # Clean up potential markdown code fences that LLMs sometimes add
+    if script.startswith("```sh"): script = script[5:]
+    if script.startswith("```bash"): script = script[7:]
+    if script.startswith("```"): script = script[3:]
+    if script.endswith("```"): script = script[:-3]
+
+    return script.strip()
+
+def save_deployment_script(script, path):
+    with open(path, "w", encoding="utf-8", newline='\n') as f:
         f.write(script)
-    os.chmod(path, 0o755)
     return path
 
 def auto_deploy(repo_full_name, branch="main"):
     """
-    Main entry: fetch context, generate script, save. Returns script path.
+    Main entry: clone repo, generate script, save in repo dir. Returns script path.
     """
-    script = generate_deployment_script(repo_full_name, branch)
-    script_path = save_deployment_script(script)
+    # Create a consistent, safe name for the container from the repo name.
+    safe_repo_name = repo_full_name.replace('/', '_').lower()
+    workspace_dir = os.path.abspath(os.path.join("workspace", safe_repo_name))
+    clone_or_pull_repo(repo_full_name, branch, workspace_dir)
+    script = generate_deployment_script(workspace_dir, container_name=safe_repo_name)
+    script_path = save_deployment_script(script, path=os.path.join(workspace_dir, "generated_deploy.sh"))
     return script_path

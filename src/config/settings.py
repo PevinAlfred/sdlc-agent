@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-PROMETHEUS_URL = os.getenv("PROMETHEUS_URL", "http://localhost:9090")
+PROMETHEUS_URL = os.getenv("PROMETHEUS_URL")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 JIRA_URL = os.getenv("JIRA_SERVER")
 JIRA_USER = os.getenv("JIRA_USER")
