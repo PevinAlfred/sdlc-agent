@@ -1,4 +1,4 @@
-## High-Level Design
+## High-Level Design.
 
 ![HLD Diagram](./docs/design/HLD.jpg)
 
